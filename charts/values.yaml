@@ -6,7 +6,7 @@ appsettings:
 fullnameOverride: ""
 image:
   pullPolicy: IfNotPresent
-  repository: registry.itpartner.no/group/project
+  repository: registry.itpartner.no/juselius/pryo
   tag: latest
 imagePullSecrets:
 - name: gitlab-registry-auth

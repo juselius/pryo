@@ -68,7 +68,7 @@ build:release:
 test:
   stage: test
   image:
-    name: mcr.microsoft.com/dotnet/core/aspnet:3.0
+    name: mcr.microsoft.com/dotnet/core/aspnet:3.1
   variables:
       GIT_STRATEGY: none
   before_script:
