@@ -23,7 +23,7 @@ let webApp =
     route "/api/init" >=>
         fun next ctx ->
             task {
-                let counter = { Value = 42 }
+                let counter = { Value = 40 }
                 return! json counter next ctx
             }
 
