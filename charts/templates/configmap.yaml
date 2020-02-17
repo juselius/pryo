@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pryo.fullname" . }}
+  labels:
+    app.gitlab.com/env: {{ default "production" .Values.environment }}
+{{ include "pryo.labels" . | indent 4 }}
+data:
+  appsettings.json: |-
+  {{- if hasPrefix "production" .Values.environment }}
+    {{ .Values.appsettings.production | nindent 4 }}
+  {{- else  }}
+    {{ .Values.appsettings.staging | nindent 4 }}
+  {{- end }}
+

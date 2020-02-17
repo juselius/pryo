@@ -1,0 +1,237 @@
+stages:
+  - prepare
+  - build
+  - test
+  - release
+  - deploy
+
+variables:
+  CLUSTER_CA: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  EXTERNAL_SERVICE_NAME: ""
+
+sdk:
+  stage: .pre
+  extends: .release
+  script:
+    - |-
+      /kaniko/executor \
+        --context $CI_PROJECT_DIR/.devcontainer \
+        --dockerfile $CI_PROJECT_DIR/.devcontainer/Dockerfile \
+        --destination $CI_REGISTRY_IMAGE:sdk
+  only:
+    changes:
+      - .devcontainer/Dockerfile
+
+.deps: &deps
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .dotnet
+    - .nuget
+    - node_modules
+
+deps:
+  stage: prepare
+  image: $CI_REGISTRY_IMAGE:sdk
+  script:
+    - |-
+      [ -d .dotnet ] && rm -rf ~/.dotnet && mv -u .dotnet ~/
+      [ -d .nuget  ] && rm -rf ~/.nuget  && mv -u .nuget ~/
+    - paket install
+    - yarn install
+    - |-
+      mv ~/.dotnet .
+      mv ~/.nuget  .
+  cache:
+      <<: *deps
+      policy: pull-push
+  only:
+    refs:
+      - master
+      - cicd
+    changes:
+      - .devcontainer/Dockerfile
+      - package.json
+      - paket.dependencies
+      - paket.lock
+      - .gitlab-ci.yml
+
+build:debug:
+  extends: .build
+  script:
+    - fake build -t Debug
+
+build:release:
+  extends: .build
+  script:
+    - fake build -t Release
+
+test:
+  stage: test
+  image:
+    name: mcr.microsoft.com/dotnet/core/aspnet:3.0
+  variables:
+      GIT_STRATEGY: none
+  before_script:
+    - rm -rf ~/.dotnet && mv .dotnet ~/
+  script:
+    - cd deploy
+    - dotnet Server.dll &
+    - sleep 10
+    - curl http://localhost:8085
+    - kill %1
+  cache:
+    <<: *deps
+    policy: pull
+  dependencies:
+    - build:debug
+  only:
+    refs:
+      - master
+      - cicd
+
+secure:
+  stage: test
+  image:
+    name: $CI_REGISTRY_IMAGE:sdk
+  variables: {}
+  script:
+      - |- [ -f ./scripts/secure.sh ] && ./src/secure.sh
+  dependencies:
+    - build:debug
+  allow_failure: true
+  only:
+    refs:
+      - master
+      - cicd
+
+release:debug:
+  stage: release
+  extends: .release
+  variables:
+    RELEASE_SLUG: debug
+  dependencies:
+    - build:debug
+
+release:release:
+  stage: release
+  extends: .release
+  variables:
+    RELEASE_SLUG: release
+  dependencies:
+    - build:release
+
+deploy:staging:
+  stage: deploy
+  extends: .deploy
+  environment:
+    name: staging-$CI_PROJECT_NAME
+    url: http://$DEPLOY_NAME
+  variables:
+    RELEASE_SLUG: debug
+    KUBE_INSTANCE: kube2
+  dependencies:
+    - release:debug
+
+deploy:production:
+  stage: deploy
+  extends: .deploy
+  environment:
+    name: production-$CI_PROJECT_NAME
+    url: http://$DEPLOY_NAME
+  variables:
+    RELEASE_SLUG: release
+    KUBE_INSTANCE: kube1
+  dependencies:
+    - release:release
+  when: manual
+
+###### TEMPLATES #######
+
+.build:
+  stage: build
+  image:
+    name: $CI_REGISTRY_IMAGE:sdk
+  artifacts:
+    paths:
+      - deploy/
+    expire_in: 7 days
+  before_script:
+    - |-
+      [ -d .dotnet ] && rm -rf ~/.dotnet && mv -u .dotnet ~/
+      [ -d .nuget  ] && rm -rf ~/.nuget  && mv -u .nuget ~/
+  script: []
+  cache:
+    <<: *deps
+    policy: pull
+  only:
+    refs:
+      - master
+      - cicd
+
+.release:
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  variables:
+    IMAGE_TAG: $CI_COMMIT_SHORT_SHA-$RELEASE_SLUG
+    IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA-$RELEASE_SLUG
+  before_script:
+    - |-
+      echo "{
+          \"auths\": {
+              \"$CI_REGISTRY\" :{
+                  \"username\":\"$CI_REGISTRY_USER\",
+                  \"password\":\"$CI_REGISTRY_PASSWORD\"}
+               }
+           }" > /kaniko/.docker/config.json
+      cat $CLUSTER_CA >> /kaniko/ssl/certs/ca-certificates.crt
+  script:
+    - |-
+      /kaniko/executor \
+        --context $CI_PROJECT_DIR \
+        --dockerfile $CI_PROJECT_DIR/Dockerfile \
+        --destination $IMAGE_NAME
+  artifacts:
+    paths:
+      - charts/
+    expire_in: 1 year
+  only:
+    refs:
+      - master
+      - cicd
+
+.deploy:
+  image: registry.itpartner.no/k8s/helm-kubectl:latest
+  variables:
+    GIT_STRATEGY: none
+    KUBECONFIG: /root/kubeconfig
+    KUBE_NAMESPACE: $CI_PROJECT_NAMESPACE
+    KUBE_INGRESS_BASE_DOMAIN: $KUBE_INSTANCE.local
+    IMAGE_TAG: $CI_COMMIT_SHORT_SHA-$RELEASE_SLUG
+    IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA-$RELEASE_SLUG
+    DEPLOY_NAME: $CI_ENVIRONMENT_SLUG.$CI_PROJECT_NAMESPACE.$KUBE_INSTANCE.local
+    HELM_CMD: upgrade
+  before_script:
+    - env
+    - kubectl config use-context $KUBE_INSTANCE
+    - kubectl get pods -n $CI_PROJECT_NAMESPACE
+    - helm list -n $CI_PROJECT_NAMESPACE
+    - |-
+      SERVICE_NAME="$(echo $CI_ENVIRONMENT_NAME | tr 'A-Z.' 'a-z-').$CI_PROJECT_NAMESPACE.$KUBE_INSTANCE.local"
+      helm list -q -n $CI_PROJECT_NAMESPACE | grep -q "$CI_ENVIRONMENT_SLUG" || HELM_CMD=install
+      [ ! -z $EXTERNAL_SERVICE_NAME ] && EXTERNAL_INGRESS="\
+        --set ingress.hosts[1].host=$EXTERNAL_SERVICE_NAME \
+        --set ingress.hosts[1].paths[0]=/"
+  script:
+    - |-
+      helm $HELM_CMD -f $CI_PROJECT_DIR/charts/values.yaml \
+        --namespace $CI_PROJECT_NAMESPACE \
+        --set environment=$CI_ENVIRONMENT_SLUG \
+        --set image.tag=$IMAGE_TAG \
+        --set ingress.hosts[0].host=$SERVICE_NAME $EXTERNAL_INGRESS \
+        --set ingress.tls[0].hosts[0]=$SERVICE_NAME \
+        $CI_ENVIRONMENT_SLUG $CI_PROJECT_DIR/charts
+  only:
+    refs:
+      - master
+      - cicd
