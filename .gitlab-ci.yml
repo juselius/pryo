@@ -95,7 +95,8 @@ secure:
     name: $CI_REGISTRY_IMAGE:sdk
   variables: {}
   script:
-      - |- [ -f ./scripts/secure.sh ] && ./src/secure.sh
+      - |-
+        [ -f ./scripts/secure.sh ] && ./src/secure.sh
   dependencies:
     - build:debug
   allow_failure: true
