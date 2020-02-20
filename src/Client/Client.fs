@@ -39,10 +39,10 @@ let init () : Model * Cmd<Msg> =
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     match currentModel.Counter, msg with
     | Some counter, Increment ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value + 5 } }
+        let nextModel = { currentModel with Counter = Some { Value = counter.Value + 1 } }
         nextModel, Cmd.none
     | Some counter, Decrement ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value - 5 } }
+        let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
         nextModel, Cmd.none
     | _, InitialCountLoaded initialCount->
         let nextModel = { Counter = Some initialCount }
@@ -95,8 +95,8 @@ let view (model : Model) (dispatch : Msg -> unit) =
               [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
                     [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
                 Columns.columns []
-                    [ Column.column [] [ button "subtract" (fun _ -> dispatch Decrement) ]
-                      Column.column [] [ button "add" (fun _ -> dispatch Increment) ] ] ]
+                    [ Column.column [] [ button "-" (fun _ -> dispatch Decrement) ]
+                      Column.column [] [ button "+" (fun _ -> dispatch Increment) ] ] ]
 
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
