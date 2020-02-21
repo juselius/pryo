@@ -14,7 +14,18 @@ open Prometheus
 
 let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
+#if DEBUG
+let publicPath =
+    "DOTNET_RUNNING_IN_CONTAINER"
+    |> tryGetEnv
+    |> function
+    | Some x when x = "true" -> "./public"
+    | _ -> "../Client/deploy"
+    |> Path.GetFullPath
+#else
 let publicPath = Path.GetFullPath "./public"
+#endif
+
 let port =
     "SERVER_PORT"
     |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8085us
@@ -23,7 +34,7 @@ let webApp =
     route "/api/init" >=>
         fun next ctx ->
             task {
-                let counter = { Value = 40 }
+                let counter = { Value = 64 }
                 return! json counter next ctx
             }
 

@@ -15,40 +15,50 @@ open Shared
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
-type Model = { Counter: Counter option }
+type Model = { WrittenText: string; CurrentText:string; Added: bool; Lists: string list }
+
+//type ModelText = {WrittenText: WrittenText option}
 
 // The Msg type defines what events/actions can occur while the application is running
 // the state of the application changes *only* in reaction to these events
 type Msg =
-    | Increment
-    | Decrement
-    | InitialCountLoaded of Counter
+    | AddToList
+    | RemoveFromList of string
+    | UpdateText of string
 
 let initialCounter () = Fetch.fetchAs<Counter> "/api/init"
 
+let currentText = ""
+
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None }
-    let loadCountCmd =
-        Cmd.OfPromise.perform initialCounter () InitialCountLoaded
-    initialModel, loadCountCmd
+    let initialModel = {WrittenText = "";CurrentText = ""; Added = false; Lists = []}
+    initialModel, Cmd.none
 
+
+let filter item removedItem  = item <> removedItem
 // The update function computes the next state of the application based on the current state and the incoming events/messages
 // It can also run side-effects (encoded as commands) like calling the server via Http.
 // these commands in turn, can dispatch messages to which the update function will react.
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
-    match currentModel.Counter, msg with
-    | Some counter, Increment ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value + 5 } }
-        nextModel, Cmd.none
-    | Some counter, Decrement ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value - 5 } }
-        nextModel, Cmd.none
-    | _, InitialCountLoaded initialCount->
-        let nextModel = { Counter = Some initialCount }
-        nextModel, Cmd.none
-    | _ -> currentModel, Cmd.none
 
+
+    match msg with
+    | UpdateText x -> { currentModel with WrittenText = x }, Cmd.none
+    | AddToList ->
+        let newList = currentModel.WrittenText:: currentModel.Lists
+        { currentModel with Added = true; Lists = newList; WrittenText = ""}, Cmd.none
+    | RemoveFromList removedItem ->
+        let removeList = currentModel.Lists |> List.filter( fun x -> filter x removedItem  )
+        { currentModel with Added = false; Lists = removeList}, Cmd.none
+
+
+
+(*let update2 (msg : Msg) (modelText : ModelText) : ModelText * Cmd<Msg> =
+    match modelText.WrittenText, msg with
+    | Some text, AddToList ->
+        let newText = {modelText with WriteText = Some {h1 [][str string]}}
+        newText, Cmd.none*)
 
 let safeComponents =
     let components =
@@ -73,34 +83,78 @@ let safeComponents =
           str " powered by: "
           components ]
 
-let show = function
-    | { Counter = Some counter } -> string counter.Value
-    | { Counter = None   } -> "Loading..."
-
-let button txt onClick =
+let box txt =
     Button.button
-        [ Button.IsFullWidth
-          Button.Color IsPrimary
-          Button.OnClick onClick ]
-        [ str txt ]
+         [ Button.IsFullWidth
+           Button.Color IsPrimary ]
+         [ str txt ]
 
-let view (model : Model) (dispatch : Msg -> unit) =
-    div []
-        [ Navbar.navbar [ Navbar.Color IsPrimary ]
-            [ Navbar.Item.div [ ]
-                [ Heading.h2 [ ]
-                    [ str "Pryo!" ] ] ]
+// let button txt onClick =
+//     Button.button
+//         [ Button.IsFullWidth
+//           Button.IsOutlined
+//           Button.Color IsPrimary
+//           Button.OnClick onClick ]
+//         [ str txt ]
 
-          Container.container []
-              [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
-                Columns.columns []
-                    [ Column.column [] [ button "subtract" (fun _ -> dispatch Decrement) ]
-                      Column.column [] [ button "add" (fun _ -> dispatch Increment) ] ] ]
+let viewSafe (model : Model) (dispatch : Msg -> unit) =
+    div [][ ]
+    //     Navbar.navbar [ Navbar.Color IsPrimary ]
+    //         [ Navbar.Item.div [ ]
+    //             [ Heading.h2 [ ]
+    //                 [ str "Pryo!" ] ] ]
 
-          Footer.footer [ ]
-                [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ safeComponents ] ] ]
+    //       Container.container []
+    //           [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
+    //                 [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
+    //              Columns.columns []
+    //                  [ Column.column [] [ button "divide" (fun _ -> dispatch Decrement) ]
+    //                    Column.column [] [ button "multiply" (fun _ -> dispatch Increment) ] ] ]
+
+    //       Footer.footer [ ]
+    //             [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
+    //                 [ safeComponents ] ]
+    // ] ]
+(*let mkli n =
+    [
+        for i in [0..n] do
+            li [] [ str (string i)]
+    ]*)
+
+let add x = x + 1
+
+let add1 = List.map add
+
+let string = ""
+
+let view (modelText : Model) (dispatch : Msg -> unit)=
+    div [] [
+        Navbar.navbar [ Navbar.Color IsDark ]
+             [ Navbar.Item.div [ ]
+                 [ Heading.h2 [ ]
+                     [ str "Pryo!"] ]
+             ]
+        h1 [] [
+             Columns.columns []
+                [ Column.column [] [ box "TO DO" ]]
+        ]
+        br []
+        ul [] [
+            li [] [
+                input [ Type "text"; Value modelText.WrittenText; OnChange ( fun ev -> dispatch ( UpdateText ev.Value ) ) ]
+                button [OnClick(fun _ -> dispatch AddToList); ] [str "add to list"; ]
+            ]
+            li [] [
+                str modelText.WrittenText
+            ]
+
+            for x in modelText.Lists do
+                li [] [
+                input [Type ""; Value x]
+                button [OnClick(fun _ -> dispatch (RemoveFromList x))] [str "X"]
+            ]
+        ] //@ mkli 9)
+    ]
 
 #if DEBUG
 open Elmish.Debug
