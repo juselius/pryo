@@ -5,7 +5,6 @@ group Server
 
     nuget FSharp.Core
     nuget Giraffe
-    nuget prometheus-net.AspNetCore
     nuget Thoth.Json.Giraffe
 
 group Client
@@ -33,3 +32,4 @@ group Build
     nuget Fake.Core.Target
     nuget Fake.DotNet.Cli
     nuget Fake.IO.FileSystem
+

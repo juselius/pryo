@@ -10,7 +10,7 @@ open Microsoft.Extensions.DependencyInjection
 open FSharp.Control.Tasks.V2
 open Giraffe
 open Shared
-open Prometheus
+
 
 let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
@@ -41,7 +41,6 @@ let webApp =
 let configureApp (app : IApplicationBuilder) =
     app.UseDefaultFiles()
        .UseStaticFiles()
-       .UseMetricServer()
        .UseGiraffe webApp
 
 let configureServices (services : IServiceCollection) =
